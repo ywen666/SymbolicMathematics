@@ -19,6 +19,16 @@ from src.envs import ENVS, build_env
 from src.trainer import Trainer
 from src.evaluator import Evaluator
 
+from egraph import exp, log, sqrt, sign
+from egraph import sin, cos, tan, cot
+from egraph import sinh, cosh, tanh, coth
+from egraph import asin, acos, atan, acot
+from egraph import asinh, acosh, atanh
+from egraph import expression, EGraph
+
+import math
+from math import pi
+
 
 np.seterr(all='raise')
 
@@ -164,9 +174,57 @@ def main(params):
     src.utils.CUDA = not params.cpu
 
     # build environment / modules / trainer / evaluator
+    #import pdb; pdb.set_trace()
     env = build_env(params)
     modules = build_modules(env, params)
     trainer = Trainer(modules, env, params)
+
+    #infix_list = []
+    #words = set()
+    ##from src.envs.char_sp import EnvDataset
+    ##dataset = EnvDataset(env, task='ode1', train=True, rng=None,params=params,path=self.data_path['ode1'][0])
+    #dataloader = env.create_train_iterator('ode1', params, trainer.data_path)
+    #dataset = dataloader.dataset
+    #print(len(dataset.data))
+
+    #def replace_y(prefix_str):
+    #    return prefix_str.replace("Y'", 'z').replace('Y', 'y')
+
+    #def replace_log_e(prefix_str):
+    #    return prefix_str.replace('ln', 'log').replace('E', 'math.e')
+
+    #infix_errors = []
+    #interested_item = []
+    #for index, item in enumerate(dataset.data):
+    #    prefix = item[0].split()
+    #    words.update(prefix)
+    #    processed_prefix = replace_y(item[0])
+    #    try:
+    #        infix = env.prefix_to_infix(processed_prefix.split())
+    #        infix = infix.replace('Abs', 'abs')
+    #        infix = replace_log_e(infix)
+    #        infix_list.append(infix)
+    #        if 'E' in infix:
+    #            interested_item.append((index, item))
+    #    except:
+    #        infix_errors.append((index, item))
+    #        continue
+
+    #goal_nodes = []
+    #lambda_fns = []
+    #errors = []
+    #eg = EGraph()
+    #for index, item in enumerate(infix_list):
+    #    lambda_fn = f'lambda x, y, z: {item}'
+    #    lambda_fns.append(lambda_fn)
+    #    try:
+    #        node = eg.add_node(expression(eval(lambda_fn)))
+    #        goal_nodes.append(node)
+    #    except:
+    #        errors.append((index, lambda_fn))
+
+    #import ipdb; ipdb.set_trace()
+
     evaluator = Evaluator(trainer)
 
     # evaluation
