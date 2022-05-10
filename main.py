@@ -15,19 +15,10 @@ import src
 from src.slurm import init_signal_handler, init_distributed_mode
 from src.utils import bool_flag, initialize_exp
 from src.model import check_model_params, build_modules
-from src.envs import ENVS, build_env
+from src.envs import ENVS, build_env, EnvDataset
 from src.trainer import Trainer
 from src.evaluator import Evaluator
-
-from egraph import exp, log, sqrt, sign
-from egraph import sin, cos, tan, cot
-from egraph import sinh, cosh, tanh, coth
-from egraph import asin, acos, atan, acot
-from egraph import asinh, acosh, atanh
-from egraph import expression, EGraph
-
-import math
-from math import pi
+from src.dataset import ODEEgraphDataset
 
 
 np.seterr(all='raise')
@@ -73,6 +64,8 @@ def get_parser():
                         help="Share input and output embeddings")
     parser.add_argument("--sinusoidal_embeddings", type=bool_flag, default=False,
                         help="Use sinusoidal embeddings")
+    parser.add_argument("--contra_coeff", type=float, default=0.,
+                        help="contrastive coefficient")
 
     # training parameters
     parser.add_argument("--env_base_seed", type=int, default=0,
@@ -174,10 +167,20 @@ def main(params):
     src.utils.CUDA = not params.cpu
 
     # build environment / modules / trainer / evaluator
-    #import pdb; pdb.set_trace()
     env = build_env(params)
     modules = build_modules(env, params)
     trainer = Trainer(modules, env, params)
+
+    #task = params.tasks[0]
+    #ode_dataset = EnvDataset(
+    #    env,
+    #    task=task,
+    #    train=True,
+    #    rng=None,
+    #    params=params,
+    #    path=trainer.data_path[task][0],
+    #)
+    #train_dataset = ODEEgraphDataset(ode_dataset, env)
 
     #infix_list = []
     #words = set()

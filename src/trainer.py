@@ -16,9 +16,13 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn.utils import clip_grad_norm_
+from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
+from torch.utils.data.distributed import DistributedSampler
 
+from .dataset import ODEEgraphDataset
 from .optim import get_optimizer
 from .utils import to_cuda
+from .envs import EnvDataset
 
 if torch.cuda.is_available():
     import apex
@@ -38,6 +42,8 @@ class Trainer(object):
         # modules / params
         self.modules = modules
         self.params = params
+        self.contra_coeff = params.contra_coeff
+        self.is_contrastive = (params.contra_coeff > 0)
         self.env = env
 
         # epoch / iteration size
@@ -141,6 +147,58 @@ class Trainer(object):
                 task: iter(self.env.create_train_iterator(task, params, self.data_path))
                 for task in params.tasks
             }
+
+            if self.is_contrastive:
+                task = params.tasks[0]
+                ode_dataset = EnvDataset(
+                    env,
+                    task=task,
+                    train=True,
+                    rng=None,
+                    params=params,
+                    path=self.data_path[task][0],
+                )
+                self.train_dataset = ODEEgraphDataset(ode_dataset, env)
+                train_sampler = self.get_train_sampler()
+                self.contrastive_dataloader = {
+                    task: iter(DataLoader(
+                        self.train_dataset,
+                        batch_size=params.batch_size,
+                        shuffle=False,
+                        sampler=train_sampler,
+                        collate_fn=self.train_dataset.collate_fn
+                    ))
+                    for task in params.tasks
+                }
+                self.check_floats()
+                import pdb; pdb.set_trace()
+
+    def check_floats(self):
+        self.success_list = []
+        self.failed_list = []
+        import time
+        start_time = time.time()
+        for idx in range(len(self.train_dataset)):
+            if idx % 5000 == 0:
+                print(f'============{idx}=============')
+                current_time = time.time() - start_time
+                print(f'Takes {current_time} secs')
+            try:
+                self.success_list.append(self.train_dataset[idx])
+            except Exception as e:
+                self.failed_list.append(idx)
+
+    def get_train_sampler(self):
+        if self.params.world_size <= 1:
+            return RandomSampler(self.train_dataset)
+        else:
+            # Not sure if I should use gloabl rank here.
+            return DistributedSampler(
+                self.train_dataset,
+                num_replicas=self.params.world_size,
+                rank=self.params.global_rank,
+                seed=self.params.env_base_seed,
+            )
 
     def set_parameters(self):
         """
@@ -393,7 +451,10 @@ class Trainer(object):
         Return a training batch for a specific task.
         """
         try:
-            batch = next(self.dataloader[task])
+            if self.is_contrastive:
+                batch = next(self.contrastive_dataloader[task])
+            else:
+                batch = next(self.dataloader[task])
         except Exception as e:
             logger.error("An unknown exception of type {0} occurred in line {1} when fetching batch. "
                          "Arguments:{2!r}. Restarting ...".format(type(e).__name__, sys.exc_info()[-1].tb_lineno, e.args))
@@ -448,7 +509,11 @@ class Trainer(object):
         decoder.train()
 
         # batch
-        (x1, len1), (x2, len2), _ = self.get_batch(task)
+        if self.is_contrastive:
+            (x1, len1), (x2, len2), (sampled_x1, sampled_len), _ = self.get_batch(task)
+        else:
+            (x1, len1), (x2, len2), _ = self.get_batch(task)
+        #(x1, len1), (x2, len2), _ = self.get_batch(task)
 
         # target words to predict
         alen = torch.arange(len2.max(), dtype=torch.long, device=len2.device)
@@ -457,11 +522,28 @@ class Trainer(object):
         assert len(y) == (len2 - 1).sum().item()
 
         # cuda
-        x1, len1, x2, len2, y = to_cuda(x1, len1, x2, len2, y)
+        if self.is_contrastive:
+            x1, len1, x2, len2, y, sampled_x1, sampled_len = to_cuda(
+                x1, len1, x2, len2, y, sampled_x1, sampled_len)
+        else:
+            x1, len1, x2, len2, y = to_cuda(x1, len1, x2, len2, y)
+        #x1, len1, x2, len2, y = to_cuda(x1, len1, x2, len2, y)
 
         # forward / loss
         encoded = encoder('fwd', x=x1, lengths=len1, causal=False)
         decoded = decoder('fwd', x=x2, lengths=len2, causal=True, src_enc=encoded.transpose(0, 1), src_len=len1)
+
+        if self.is_contrastive:
+            sampled_encoded = encoder(
+                'fwd', x=sampled_x1, lengths=sampled_len, causal=False)
+
+            contrastive_states = torch.stack(
+                [encoded[len1 - 1, torch.arange(encoded.size(1))],
+                sampled_encoded[len2 - 1, torch.arange(sampled_encoded.size(1))]],
+            )
+            contra_loss = self.contra_coeff * self.info_nce_loss(contrastive_states)
+
+        import pdb; pdb.set_trace()
         _, loss = decoder('predict', tensor=decoded, pred_mask=pred_mask, y=y, get_scores=False)
         self.stats[task].append(loss.item())
 
@@ -472,3 +554,35 @@ class Trainer(object):
         self.n_equations += params.batch_size
         self.stats['processed_e'] += len1.size(0)
         self.stats['processed_w'] += (len1 + len2 - 2).sum().item()
+
+    def info_nce_loss(self, features, n_views=2, temperature=0.5):
+        # features is of shape [2, |kwargs['contrastive_nodes']|, hidden]
+        batch_size = features.size(0) // n_views
+        labels = torch.cat([torch.arange(batch_size) for i in range(n_views)], dim=0)
+        labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+        labels = labels.to(features.device)
+
+        features = F.normalize(features, dim=1)
+
+        similarity_matrix = torch.matmul(features, features.T)
+        # assert similarity_matrix.shape == (
+        #     self.args.n_views * self.args.batch_size, self.args.n_views * self.args.batch_size)
+        # assert similarity_matrix.shape == labels.shape
+
+        # discard the main diagonal from both: labels and similarities matrix
+        mask = torch.eye(labels.shape[0], dtype=torch.bool).to(features.device)
+        labels = labels[~mask].view(labels.shape[0], -1)
+        similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
+        # assert similarity_matrix.shape == labels.shape
+
+        # select and combine multiple positives
+        positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
+
+        # select only the negatives the negatives
+        negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
+
+        logits = torch.cat([positives, negatives], dim=1)
+        labels = torch.zeros(logits.shape[0], dtype=torch.long).to(features.device)
+
+        logits = logits / temperature
+        return logits, labels
