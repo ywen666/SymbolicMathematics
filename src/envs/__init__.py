@@ -8,6 +8,7 @@
 from logging import getLogger
 
 from .char_sp import CharSPEnvironment
+from .char_sp import EnvDataset
 
 
 logger = getLogger()

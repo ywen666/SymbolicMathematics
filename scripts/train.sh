@@ -2,7 +2,8 @@ DATA_PREFIX=/scratch1/08401/ywen/data/math
 
 #python -m torch.distributed.launch --nproc_per_node=$NGPU main.py
 #python -m torch.distributed.launch --nproc_per_node=4 main.py \
-python main.py \
+#CUDA_VISIBLE_DEVICES=1,2 python -m torch.distributed.launch --nproc_per_node=2 main.py \
+CUDA_VISIBLE_DEVICES=1 python main.py \
     --exp_name ode1_train \
     --fp16 true \
     --amp 2 \
@@ -17,4 +18,5 @@ python main.py \
     --batch_size 16 \
     --epoch_size 300000 \
     --master_port 16666 \
-    --validation_metrics valid_ode1_acc # validation metric (when to save the model)
+    --contra_coeff 0.01 \
+    --validation_metrics valid_ode1_acc

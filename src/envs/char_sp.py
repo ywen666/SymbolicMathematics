@@ -60,6 +60,10 @@ class UnknownSymPyOperator(Exception):
     pass
 
 
+class UnconvertibleFloat(Exception):
+    pass
+
+
 class InvalidPrefixExpression(Exception):
 
     def __init__(self, data):
@@ -714,6 +718,25 @@ class CharSPEnvironment(object):
             return ['pi']
         elif expr == sp.I:
             return ['I']
+        elif isinstance(expr, float):
+            int1, int2 = expr.as_integer_ratio()
+            if int1 > 10 or int1 < -10 or int2 > 10 or int2 < -10 or int1 == 0 or int2 == 0:
+                raise UnconvertibleFloat(f"Unconvertible float: {expr}")
+            else:
+                results = ['div']
+                if int1 < 0:
+                    results.append('INT-')
+                else:
+                    results.append('INT+')
+                results.append(abs(int1))
+
+                if int2 < 0:
+                    results.append('INT-')
+                else:
+                    results.append('INT+')
+                results.append(abs(int2))
+                return results
+
         # SymPy operator
         for op_type, op_name in self.SYMPY_OPERATORS.items():
             if isinstance(expr, op_type):

@@ -28,151 +28,141 @@ import sympy
 from sympy import Symbol, symbols
 
 
+E = Symbol('E')
+PI = Symbol('pi')
+
+
 def sin(node):
     if isinstance(node, Node):
         return Node("sin", tuple([node]))
     else:
-        return math.sin(node)
+        return Node("sin", tuple([Node(node, ())]))
 
 
 def cos(node):
     if isinstance(node, Node):
         return Node("cos", tuple([node]))
     else:
-        return math.cos(node)
+        return Node("cos", tuple([Node(node, ())]))
 
 
 def tan(node):
     if isinstance(node, Node):
         return Node("tan", tuple([node]))
     else:
-        return math.tan(node)
+        return Node("tan", tuple([Node(node, ())]))
 
 
 def cot(node):
     if isinstance(node, Node):
         return Node("cot", tuple([node]))
     else:
-        return 1 / math.tan(node)
+        return Node("cot", tuple([Node(node, ())]))
 
 
 def asin(node):
     if isinstance(node, Node):
         return Node("asin", tuple([node]))
     else:
-        return math.asin(node)
+        return Node("asin", tuple([Node(node, ())]))
 
 
 def acos(node):
     if isinstance(node, Node):
         return Node("acos", tuple([node]))
     else:
-        return math.acos(node)
+        return Node("acos", tuple([Node(node, ())]))
 
 
 def atan(node):
     if isinstance(node, Node):
         return Node("atan", tuple([node]))
     else:
-        return math.atan(node)
+        return Node("atan", tuple([Node(node, ())]))
 
 
 def acot(node):
     if isinstance(node, Node):
         return Node("acot", tuple([node]))
     else:
-        return math.atan(1 / node)
+        return Node("acot", tuple([Node(node, ())]))
 
 
 def sinh(node):
     if isinstance(node, Node):
         return Node("sinh", tuple([node]))
     else:
-        return math.sinh(node)
+        return Node("sinh", tuple([Node(node, ())]))
 
 
 def cosh(node):
     if isinstance(node, Node):
         return Node("cosh", tuple([node]))
     else:
-        return math.cosh(node)
+        return Node("cosh", tuple([Node(node, ())]))
 
 
 def tanh(node):
     if isinstance(node, Node):
         return Node("tanh", tuple([node]))
     else:
-        return math.tanh(node)
+        return Node("tanh", tuple([Node(node, ())]))
 
 
 def coth(node):
     if isinstance(node, Node):
         return Node("coth", tuple([node]))
     else:
-        return math.cosh(node) / math.sinh(node)
+        return Node("coth", tuple([Node(node, ())]))
 
 
 def asinh(node):
     if isinstance(node, Node):
         return Node("asinh", tuple([node]))
     else:
-        return math.asinh(node)
+        return Node("asinh", tuple([Node(node, ())]))
 
 
 def acosh(node):
     if isinstance(node, Node):
         return Node("acosh", tuple([node]))
     else:
-        return math.acosh(node)
+        return Node("acosh", tuple([Node(node, ())]))
 
 
 def atanh(node):
     if isinstance(node, Node):
         return Node("atanh", tuple([node]))
     else:
-        return math.atanh(node)
+        return Node("atanh", tuple([Node(node, ())]))
 
 
 def exp(node):
     if isinstance(node, Node):
         return Node("exp", tuple([node]))
     else:
-        return math.exp(node)
+        return Node("exp", tuple([Node(node, ())]))
 
 
 def log(node):
     if isinstance(node, Node):
         return Node("log", tuple([node]))
     else:
-        return math.log(node)
+        return Node("log", tuple([Node(node, ())]))
 
 
 def sqrt(node):
     if isinstance(node, Node):
         return Node("sqrt", tuple([node]))
     else:
-        return math.sqrt(node)
+        return Node("sqrt", tuple([Node(node, ())]))
 
 
 def sign(node):
     if isinstance(node, Node):
         return Node("sign", tuple([node]))
     else:
-        return math.copysign(1, node)
-
-
-def mysquare(node):
-    if isinstance(node, Node):
-        return Node("square", tuple([node]))
-    else:
-        return math.pow(node, 2)
-
-
-def myroot(node):
-    if isinstance(node, Node):
-        return Node("root", tuple([node]))
-    else:
-        return math.pow(node, 0.5)
+        return Node("sign", tuple([Node(node, ())]))
 
 
 def mymin(*args):
@@ -197,8 +187,8 @@ class Node(ABC):
     if key == math.pi:
       self.key = Symbol('pi')
       #self.key = Symbol('pi')
-    elif key == math.e:
-      self.key = Symbol('e')
+    elif key == math.e or key == 'math.e':
+      self.key = Symbol('E')
     else:
       self.key = key
     self.args = args
