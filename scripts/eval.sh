@@ -1,9 +1,9 @@
-DATA_PREFIX=/home/ewen/data/math
+DATA_PREFIX=/scratch1/08401/ywen/data/math
 
 python main.py \
     --exp_name ode1_eval \
     --eval_only true \
-    --reload_model "save/ode1_baseline/ode1.pth" \
+    --reload_model "dumped/ode1_train/4310767/best-valid_ode1_acc.pth" \
     --tasks "ode1" \
     --reload_data "ode1,${DATA_PREFIX}/ode1.train,${DATA_PREFIX}/ode1.valid,${DATA_PREFIX}/ode1.test" \
     --emb_dim 1024 \
@@ -16,4 +16,3 @@ python main.py \
     --beam_early_stopping 1 \
     --eval_verbose 1 \
     --eval_verbose_print false
-    #--reload_data "prim_fwd,prim_fwd.train,prim_fwd.valid,prim_fwd.test"  # data location
