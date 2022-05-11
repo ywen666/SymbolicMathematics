@@ -30,6 +30,7 @@ from egraph import asinh, acosh, atanh
 from egraph import E, PI
 from egraph import expression, EGraph, Node, Rule, apply_rules
 
+from .envs.char_sp import UnknownSymPyOperator
 
 
 def replace_y(prefix_str):
@@ -232,44 +233,50 @@ class ODEEgraphDataset(torch.utils.data.Dataset):
         }
 
     def __getitem__(self, idx):
-        x = self.infix_list[idx]
-        original_x, y = self.ode_dataset.data[self.success_to_original[idx]]
-        eg = self.eg_list[idx // self.programs_per_egraph]
-        goal_node = eg.add_node(expression(eval(f'lambda x, y, z: {x}')))
-        reversed_graph = self.reversed_graphs[idx // self.programs_per_egraph]
+        try:
+            x = self.infix_list[idx]
+            original_x, y = self.ode_dataset.data[self.success_to_original[idx]]
+            eg = self.eg_list[idx // self.programs_per_egraph]
+            goal_node = eg.add_node(expression(eval(f'lambda x, y, z: {x}')))
+            reversed_graph = self.reversed_graphs[idx // self.programs_per_egraph]
 
-        sampled_path = self.sample_path(goal_node, eg, reversed_graph)
-        sampled_infix = self.transform_path_to_infix(goal_node, sampled_path)
-        #while sampled_infix == x:
-        #    sampled_path = self.sample_path(goal_node, eg, reversed_graph)
-        #    sampled_infix = self.transform_path_to_infix(goal_node, sampled_path)
+            sampled_path = self.sample_path(goal_node, eg, reversed_graph)
+            sampled_infix = self.transform_path_to_infix(goal_node, sampled_path)
+            #while sampled_infix == x:
+            #    sampled_path = self.sample_path(goal_node, eg, reversed_graph)
+            #    sampled_infix = self.transform_path_to_infix(goal_node, sampled_path)
 
-        # Replace back Y, Y', ln and E.
-        sampled_infix = sampled_infix.replace('math.e', 'E').replace('log', 'ln')
-        x = x.replace('math.e', 'E').replace('log', 'ln')
-        replace_dict = {'z': "Y'", 'y': 'Y', 'log': 'ln', 'math.e': 'E'}
+            # Replace back Y, Y', ln and E.
+            sampled_infix = sampled_infix.replace('math.e', 'E').replace('log', 'ln')
+            x = x.replace('math.e', 'E').replace('log', 'ln')
+            replace_dict = {'z': "Y'", 'y': 'Y', 'log': 'ln', 'math.e': 'E'}
 
-        #print(f'======================={idx}==========================')
-        #print(f'original x, {original_x}')
+            #print(f'======================={idx}==========================')
+            #print(f'original x, {original_x}')
 
-        sympy_code = parse_expr(x, evaluate=False, local_dict=self.env.local_dict)
+            sympy_code = parse_expr(x, evaluate=False, local_dict=self.env.local_dict)
 
-        #print(f'original infix, {sympy_code}')
+            #print(f'original infix, {sympy_code}')
 
-        sampled_sympy_code = parse_expr(sampled_infix, evaluate=False, local_dict=self.env.local_dict)
-        prefix_code = self.env.sympy_to_prefix(sympy_code)
-        sampled_prefix = self.env.sympy_to_prefix(sampled_sympy_code)
+            sampled_sympy_code = parse_expr(sampled_infix, evaluate=False, local_dict=self.env.local_dict)
+            prefix_code = self.env.sympy_to_prefix(sympy_code)
+            sampled_prefix = self.env.sympy_to_prefix(sampled_sympy_code)
 
-        replace_map = lambda x: replace_dict[x] if x in replace_dict else x
-        adjust_sampled_prefix = list(map(replace_map, sampled_prefix))
+            replace_map = lambda x: replace_dict[x] if x in replace_dict else x
+            adjust_sampled_prefix = list(map(replace_map, sampled_prefix))
 
-        original_x = original_x.split()
-        y = y.split()
+            original_x = original_x.split()
+            y = y.split()
 
-        #print(f'sampled_infix, {sampled_sympy_code}')
-        #print(f'sampled_prefix, {adjust_sampled_prefix}')
+            #print(f'sampled_infix, {sampled_sympy_code}')
+            #print(f'sampled_prefix, {adjust_sampled_prefix}')
 
-        return original_x, y, adjust_sampled_prefix
+            if len(adjust_sampled_prefix) > 512:
+                return original_x, y, original_x
+            else:
+                return original_x, y, adjust_sampled_prefix
+        except UnknownSymPyOperator:
+            return None
         #return {
         #    'original_x': original_x,
         #    'x': x,
@@ -281,6 +288,7 @@ class ODEEgraphDataset(torch.utils.data.Dataset):
         #}
 
     def collate_fn(self, elements):
+        elements = list(filter(lambda x: x is not None, elements))
         x, y, sampled_x = zip(*elements)
         nb_ops = [sum(int(word in self.env.OPERATORS) for word in seq) for seq in x]
         # for i in range(len(x)):

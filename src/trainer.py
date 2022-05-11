@@ -13,8 +13,11 @@ import time
 from logging import getLogger
 from collections import OrderedDict
 import numpy as np
+
 import torch
-from torch import nn
+import torch.nn as nn
+import torch.nn.functional as F
+
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
@@ -166,12 +169,13 @@ class Trainer(object):
                         batch_size=params.batch_size,
                         shuffle=False,
                         sampler=train_sampler,
-                        collate_fn=self.train_dataset.collate_fn
+                        collate_fn=self.train_dataset.collate_fn,
+                        num_workers=20,
                     ))
                     for task in params.tasks
                 }
-                self.check_floats()
-                import pdb; pdb.set_trace()
+                #self.train_dataset.test_get(315)
+                #import pdb; pdb.set_trace()
 
     def check_floats(self):
         self.success_list = []
@@ -528,23 +532,38 @@ class Trainer(object):
         else:
             x1, len1, x2, len2, y = to_cuda(x1, len1, x2, len2, y)
         #x1, len1, x2, len2, y = to_cuda(x1, len1, x2, len2, y)
+        #print(f'x1 shape is {x1.shape}')
+        #print(f'x1 len shape is {len1.shape}')
+        #print(f'x2 shape is {x2.shape}')
+        #print(f'x2 len shape is {len2.shape}')
+        #print(f'sampled x1 shape is {sampled_x1.shape}')
+        #print(f'sampled len shape is {sampled_len.shape}')
 
         # forward / loss
         encoded = encoder('fwd', x=x1, lengths=len1, causal=False)
         decoded = decoder('fwd', x=x2, lengths=len2, causal=True, src_enc=encoded.transpose(0, 1), src_len=len1)
 
+        _, loss = decoder('predict', tensor=decoded, pred_mask=pred_mask, y=y, get_scores=False)
         if self.is_contrastive:
             sampled_encoded = encoder(
                 'fwd', x=sampled_x1, lengths=sampled_len, causal=False)
+            sampled_decoded = decoder(
+                'fwd', x=x2, lengths=len2, causal=True,
+                src_enc=sampled_encoded.transpose(0, 1), src_len=sampled_len)
+            _, sampled_decoder_loss = decoder(
+                'predict', tensor=sampled_decoded, pred_mask=pred_mask,
+                y=y, get_scores=False)
 
-            contrastive_states = torch.stack(
+            contrastive_states = torch.cat(
                 [encoded[len1 - 1, torch.arange(encoded.size(1))],
                 sampled_encoded[len2 - 1, torch.arange(sampled_encoded.size(1))]],
+                dim=0
             )
-            contra_loss = self.contra_coeff * self.info_nce_loss(contrastive_states)
+            contra_logits, contra_labels = self.info_nce_loss(contrastive_states)
+            contra_ce = nn.CrossEntropyLoss()
+            contra_loss = contra_ce(contra_logits, contra_labels)
+            loss += sampled_decoder_loss + self.contra_coeff * contra_loss
 
-        import pdb; pdb.set_trace()
-        _, loss = decoder('predict', tensor=decoded, pred_mask=pred_mask, y=y, get_scores=False)
         self.stats[task].append(loss.item())
 
         # optimize
