@@ -45,7 +45,7 @@ def replace_pi(prefix_str):
 
 
 class ODEEgraphDataset(torch.utils.data.Dataset):
-    def __init__(self, ode_dataset, env, programs_per_egraph=1000, max_length=512, training=True):
+    def __init__(self, ode_dataset, env, programs_per_egraph=500, max_length=512, training=True):
         self.ode_dataset = ode_dataset
         self.env = env
         self.max_length = max_length
