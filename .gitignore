@@ -129,3 +129,6 @@ dmypy.json
 /dumped
 .vscode
 /save
+scripts
+scripts/eval.sh
+scripts/train.sh

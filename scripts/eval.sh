@@ -3,7 +3,7 @@ DATA_PREFIX=/scratch1/08401/ywen/data/math
 python main.py \
     --exp_name ode1_eval \
     --eval_only true \
-    --reload_model "dumped/ode1_train/4310767/best-valid_ode1_acc.pth" \
+    --reload_model "dumped/ode1_train/4329707/best-valid_ode1_acc.pth" \
     --tasks "ode1" \
     --reload_data "ode1,${DATA_PREFIX}/ode1.train,${DATA_PREFIX}/ode1.valid,${DATA_PREFIX}/ode1.test" \
     --emb_dim 1024 \
@@ -16,3 +16,4 @@ python main.py \
     --beam_early_stopping 1 \
     --eval_verbose 1 \
     --eval_verbose_print false
+    #--reload_model "dumped/ode1_train/baseline/4309046/best-valid_ode1_acc.pth" \

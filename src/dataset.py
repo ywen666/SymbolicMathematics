@@ -15,6 +15,7 @@ from typing import (
 
 import re
 import math
+import time
 import torch
 import random
 import sympy
@@ -46,19 +47,14 @@ def replace_pi(prefix_str):
 
 
 class ODEEgraphDataset(torch.utils.data.Dataset):
-    def __init__(self, ode_dataset, env, programs_per_egraph=500, max_length=512, training=True):
+    def __init__(self, ode_dataset, env, programs_per_egraph=1000, max_length=512, training=True):
         self.ode_dataset = ode_dataset
         self.env = env
         self.max_length = max_length
         self.training = training
         self.programs_per_egraph = programs_per_egraph
         self.build_infix_list()
-        self.num_egraphs = 1 + len(self.infix_list) // self.programs_per_egraph
-        self.eg_list = [EGraph() for i in range(self.num_egraphs)]
 
-        for i, item in enumerate(self.infix_list):
-            self.eg_list[i // self.programs_per_egraph].add_node(
-                expression(eval(f'lambda x, y, z: {item}')))
         self.rules = [
             Rule(lambda x, y, z: ((x * y) / z, x * (y / z))), # reassociate
             Rule(lambda x: (x / x, Node(1,()))), # simplify
@@ -72,13 +68,16 @@ class ODEEgraphDataset(torch.utils.data.Dataset):
             Rule(lambda x, y: (x * y, x / (1 / y))),
             Rule(lambda x, y: (x / y, x * (1 / y))),
         ]
+        start_time = time.time()
         for eg in self.eg_list:
             apply_rules(eg, self.rules)
-        self.goal_nodes = [
-            self.eg_list[i // self.programs_per_egraph].add_node(
-                expression(eval(f'lambda x, y, z: {item}')))
-            for i, fn in enumerate(self.infix_list)
-        ]
+        print('Equivalent takes {} secs'.format(time.time() - start_time))
+
+        #self.goal_nodes = [
+        #    self.eg_list[i // self.programs_per_egraph].add_node(
+        #        expression(eval(f'lambda x, y, z: {item}')))
+        #    for i, fn in enumerate(self.infix_list)
+        #]
         self.reversed_graphs = [self.build_reversed_graph(eg) for eg in self.eg_list]
 
     def odestr_to_infix(self, input_str):
@@ -92,6 +91,7 @@ class ODEEgraphDataset(torch.utils.data.Dataset):
         self.infix_list = []
         self.infix_errors = []
         self.interested_item = []
+        start_time = time.time()
         for index, item in enumerate(self.ode_dataset.data):
             processed_prefix = replace_y(item[0])
             #infix = self.env.prefix_to_infix(processed_prefix.split())
@@ -110,20 +110,30 @@ class ODEEgraphDataset(torch.utils.data.Dataset):
             except:
                 self.infix_errors.append((index, item))
                 continue
+        temp = time.time() - start_time
+        print(f'Looping ode dataset takes {temp} secs')
 
         success_infix_list = []
         self.success_to_original = []
         self.egraph_errors = []
+        self.eg_list = [EGraph()]
+        start_time = time.time()
         for index, item in enumerate(self.infix_list):
-            eg = EGraph()
             lambda_fn = f'lambda x, y, z: {item}'
             try:
-                node = eg.add_node(expression(eval(lambda_fn)))
+                #node = eg.add_node(expression(eval(lambda_fn)))
+                eg_idx = len(success_infix_list) // self.programs_per_egraph
+                if eg_idx >= len(self.eg_list):
+                    self.eg_list.append(EGraph())
+                self.eg_list[eg_idx].add_node(expression(eval(lambda_fn)))
                 success_infix_list.append(item)
                 self.success_to_original.append(index)
-            except:
+            except Exception as e:
+                print(f'Invalid program for egraph, error: {e}')
                 self.egraph_errors.append((index, lambda_fn))
         self.infix_list = success_infix_list
+        temp = time.time() - start_time
+        print(f'Building initial egraph takes {temp} secs')
 
     def build_reversed_graph(self, egraph):
         reversed_graph = {}

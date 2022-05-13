@@ -23,6 +23,23 @@ from src.dataset import ODEEgraphDataset
 
 np.seterr(all='raise')
 
+import sys
+import pdb
+
+class ForkedPdb(pdb.Pdb):
+    """A Pdb subclass that may be used
+    from a forked multiprocessing child
+
+    """
+    def interaction(self, *args, **kwargs):
+        _stdin = sys.stdin
+        try:
+            sys.stdin = open('/dev/stdin')
+            pdb.Pdb.interaction(self, *args, **kwargs)
+        finally:
+            sys.stdin = _stdin
+
+
 
 def get_parser():
     """
@@ -245,16 +262,28 @@ def main(params):
 
         trainer.n_equations = 0
 
-        while trainer.n_equations < trainer.epoch_size:
-
-            # training steps
-            for task_id in np.random.permutation(len(params.tasks)):
-                task = params.tasks[task_id]
-                if params.export_data:
-                    trainer.export_data(task)
-                else:
+        if params.contra_coeff > 0.:
+            # TODO: hack here!
+            end = len(trainer.contrastive_dataloader['ode1'])
+            print(f'==============Dataloader has length {end}================')
+            trainer.reinit_contrastive_dataloader()
+            for _ in range(end):
+                # training steps
+                for task_id in np.random.permutation(len(params.tasks)):
+                    task = params.tasks[task_id]
                     trainer.enc_dec_step(task)
-                trainer.iter()
+                    trainer.iter()
+        else:
+            while trainer.n_equations < trainer.epoch_size:
+
+                # training steps
+                for task_id in np.random.permutation(len(params.tasks)):
+                    task = params.tasks[task_id]
+                    if params.export_data:
+                        trainer.export_data(task)
+                    else:
+                        trainer.enc_dec_step(task)
+                    trainer.iter()
 
         logger.info("============ End of epoch %i ============" % trainer.epoch)
 

@@ -161,21 +161,40 @@ class Trainer(object):
                     params=params,
                     path=self.data_path[task][0],
                 )
+                start_time = time.time()
                 self.train_dataset = ODEEgraphDataset(ode_dataset, env)
-                train_sampler = self.get_train_sampler()
+                temp = time.time() - start_time
+                print(f'initializing dataset takes {temp} secs.')
+                train_sampler = RandomSampler(self.train_dataset)
+
                 self.contrastive_dataloader = {
-                    task: iter(DataLoader(
+                    task: DataLoader(
                         self.train_dataset,
                         batch_size=params.batch_size,
                         shuffle=False,
                         sampler=train_sampler,
                         collate_fn=self.train_dataset.collate_fn,
                         num_workers=20,
-                    ))
-                    for task in params.tasks
+                        pin_memory=True,
+                    )
                 }
+                #self.contrastive_dataloader_iter = {
+                #    task: iter(loader)
+                #    for task, loader in self.contrastive_dataloader.items()
+                #}
                 #self.train_dataset.test_get(315)
+                #start_time = time.time()
+                #for _ in range(20):
+                #    kk = self.contrastive_dataloader['ode1'].next()
+                #temp = time.time() - start_time
+                #print(f'20 dataloader iterations takes {temp} secs.')
                 #import pdb; pdb.set_trace()
+
+    def reinit_contrastive_dataloader(self):
+        self.contrastive_dataloader_iter = {
+            task: iter(loader)
+            for task, loader in self.contrastive_dataloader.items()
+        }
 
     def check_floats(self):
         self.success_list = []
@@ -456,7 +475,7 @@ class Trainer(object):
         """
         try:
             if self.is_contrastive:
-                batch = next(self.contrastive_dataloader[task])
+                batch = next(self.contrastive_dataloader_iter[task])
             else:
                 batch = next(self.dataloader[task])
         except Exception as e:
